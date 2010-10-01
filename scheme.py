@@ -13,6 +13,8 @@ import sys
 #   string                        str
 #   empty list			  None
 #   pair			  Pair
+#   eof-object                    exit
+#                                 (a built-in function with a suggestive name)
 
 class Character(str):
     name_to_char = {
@@ -36,6 +38,28 @@ string_escape_to_char = dict((e, eval('"\\%s"' % e)) for e in string_escapes)
 string_char_to_escape = dict((c, e)
                              for e, c in string_escape_to_char.iteritems())
 
+class Pair(list):
+    pass
+
+def cons(car, cdr):
+    return Pair([car, cdr])
+
+def car(pair):
+    assert isinstance(pair, Pair)
+    return pair[0]
+
+def cdr(pair):
+    assert isinstance(pair, Pair)
+    return pair[1]
+
+def setcar(pair, new_car):
+    assert isinstance(pair, Pair)
+    pair[0] = new_car
+    
+def setcdr(pair, new_cdr):
+    assert isinstance(pair, Pair)
+    pair[1] = new_cdr
+
 
 ungot = None
 
@@ -51,6 +75,11 @@ def ungetc(c):
     assert ungot is None
     ungot = c
     
+def peekc(f):
+    global ungot
+    ungot = getc(f)
+    return ungot
+
 def getc_or_die(f):
     c = getc(f)
     if not c:
@@ -100,7 +129,37 @@ def read_string(f):
             c = string_escape_to_char.get(c, c)
         s += c
 
-def schread(f):
+def read_pair(f):
+    eat_whitespace(f)
+    c = getc_or_die(f)
+    if c == ')':
+        return None
+    ungetc(c)
+    car_obj = read_or_die(f)
+    eat_whitespace(f)
+    c = getc_or_die(f)
+    if c == '.':
+        c = peekc(f)
+        if not is_delimiter(c):
+            exit('dot not followed by delimiter')
+        eat_whitespace(f)
+        cdr_obj = read_or_die(f)
+        eat_whitespace(f)
+        c = getc_or_die(f)
+        if c != ')':
+            exit('expected ")", got "%s"' % c)
+    else:
+        ungetc(c)
+        cdr_obj = read_pair(f)
+    return cons(car_obj, cdr_obj)
+
+def read_or_die(f):
+    exp = read(f)
+    if exp is exit:
+        exit('unexpected EOF')
+    return exp
+
+def read(f):
     sign = 1
     while True:
         c = getc(f)
@@ -134,26 +193,32 @@ def schread(f):
         elif c == '"':
             return read_string(f)
         elif c == '(':
-            eat_whitespace(f)
-            c = getc_or_die(f)
-            if c == ')':
-                return None
-            exit('unexpected input "%s"' % c)
+            return read_pair(f)
         else:
             exit('bad input.  Unexpected "%s"' % c)
-    print >>sys.stderr, 'EOF'
-    exit(0)
+    return exit
         
 
 def is_self_evaluating(exp):
     return isinstance(exp, (int, long, bool, Character, str))
 
 def scheval(exp):
-    if is_self_evaluating(exp):
+#    if is_self_evaluating(exp):
         return exp
-    exit('must be expression: "%s"' % exp)
+#    exit('must be expression: "%s"' % exp)
 
-def schwrite(x):
+def write_pair(pair):
+    assert isinstance(pair, Pair)
+    write(car(pair))
+    rest = cdr(pair)
+    if isinstance(rest, Pair):
+        sys.stdout.write(' ')
+        write_pair(rest)
+    elif rest is not None:
+        sys.stdout.write(' . ')
+        write(rest)
+
+def write(x):
     if isinstance(x, bool):
         sys.stdout.write(x and '#t' or '#f')
     elif isinstance(x, (int, long)):
@@ -170,13 +235,24 @@ def schwrite(x):
                 s += c
         s += '"'
         sys.stdout.write(s)
+    elif isinstance(x, Pair):
+        
+        sys.stdout.write('(')
+        write_pair(x)
+        sys.stdout.write(')')
+    elif x is None:
+        sys.stdout.write('()')
     else:
         exit("can't write unknown type")
 
 def main():
     while True:
         sys.stdout.write('> ')
-        schwrite(scheval(schread(sys.stdin)))
+        exp = read(sys.stdin)
+        if exp is exit:
+            print
+            break
+        write(scheval(exp))
         print
 
 if __name__ == '__main__':
