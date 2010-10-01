@@ -67,6 +67,13 @@ def is_space(c):
 def is_delimiter(c):
     return not c or c in '()"' or is_space(c);
 
+def eat_whitespace(f):
+    while True:
+        c = getc(f)
+        if not is_space(c):
+            ungetc(c)
+            break
+
 def read_character(f):
     c = getc_or_die(f)
     if c in string.ascii_lowercase:
@@ -78,7 +85,7 @@ def read_character(f):
             if s in Character.name_to_char:
                 return Character(Character.name_to_char[s])
             else:
-                exit('illegal character "#\%s' % s)
+                exit('illegal character "#\%s"' % s)
         c = s
     return Character(c)
 
@@ -126,6 +133,12 @@ def schread(f):
                 exit('bad input.  Unexpected "#%s"' % c)
         elif c == '"':
             return read_string(f)
+        elif c == '(':
+            eat_whitespace(f)
+            c = getc_or_die(f)
+            if c == ')':
+                return None
+            exit('unexpected input "%s"' % c)
         else:
             exit('bad input.  Unexpected "%s"' % c)
     print >>sys.stderr, 'EOF'
@@ -133,10 +146,12 @@ def schread(f):
         
 
 def is_self_evaluating(exp):
-    return isinstance(x, (int, long, bool, Character, str))
+    return isinstance(exp, (int, long, bool, Character, str))
 
 def scheval(exp):
-    return exp
+    if is_self_evaluating(exp):
+        return exp
+    exit('must be expression: "%s"' % exp)
 
 def schwrite(x):
     if isinstance(x, bool):
@@ -147,7 +162,6 @@ def schwrite(x):
         x = Character.char_to_name.get(x, x)
         sys.stdout.write('#\\%s' % x)
     elif isinstance(x, str):
-        print 'x=%r' % x
         s = '"'
         for c in x:
             if c in string_char_to_escape:
