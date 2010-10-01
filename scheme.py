@@ -46,6 +46,14 @@ def schread():
                 ungetc(c)
                 return int(n)
             exit('number not followed by delimiter')
+        elif c == '#':
+            c = getc()
+            if c.lower() == 'f':
+                return False
+            elif c.lower() == 't':
+                return True
+            else:
+                exit('bad input.  Unexpected "#%s"' % c)
         else:
             exit('bad input.  Unexpected "%s"' % c)
     print >>sys.stderr, 'EOF'
@@ -53,13 +61,15 @@ def schread():
         
 
 def is_self_evaluating(exp):
-    return isinstance(x, (int, long))
+    return isinstance(x, (int, long, bool))
 
 def scheval(exp):
     return exp
 
 def schwrite(x):
-    if isinstance(x, (int, long)):
+    if isinstance(x, bool):
+        sys.stdout.write(x and '#t' or '#f')
+    elif isinstance(x, (int, long)):
         sys.stdout.write(str(x))
     else:
         exit("can't write unknown type")
