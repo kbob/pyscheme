@@ -3,8 +3,19 @@
 import string
 import sys
 
+# Data Type Map
+#
+# Scheme Type                   Python Type
+# ------ ----                   ------ ----
+#   boolean                       bool
+#   integer                       int, long
+#   character                     Character
+#   string                        str
+#   empty list			  None
+#   pair			  Pair
+
 class Character(str):
-    name2ord = {
+    name_to_char = {
         'nul'      : '\0',
         'alarm'    : '\a',
         'backspace': '\b',
@@ -17,8 +28,14 @@ class Character(str):
         'space'    : ' ',
         'delete'   : '\0177',
         }
-    ord2name = dict((v, k) for k, v in name2ord.iteritems())
-    name2ord['linefeed'] = '\n'
+    char_to_name = dict((c, n) for n, c in name_to_char.iteritems())
+    name_to_char['linefeed'] = '\n'  # synonym for #\newline
+
+string_escapes = 'abtnvfr"\\'
+string_escape_to_char = dict((e, eval('"\\%s"' % e)) for e in string_escapes)
+string_char_to_escape = dict((c, e)
+                             for e, c in string_escape_to_char.iteritems())
+
 
 ungot = None
 
@@ -34,11 +51,12 @@ def ungetc(c):
     assert ungot is None
     ungot = c
     
-def peekc(f):
-    global ungot
-    if not ungot:
-        ungot = getc()
-    return ungot
+def getc_or_die(f):
+    c = getc(f)
+    if not c:
+        exit('Unexpected EOF')
+    return c
+
 
 def is_digit(c):
     return c in string.digits
@@ -50,21 +68,30 @@ def is_delimiter(c):
     return not c or c in '()"' or is_space(c);
 
 def read_character(f):
-    c = getc(f)
-    if not c:
-        exit('incomplete character literal')
+    c = getc_or_die(f)
     if c in string.ascii_lowercase:
         s = ''
         while c in string.ascii_lowercase:
             s += c
-            c = getc(f)
+            c = getc_or_die(f)
         if len(s) > 1:
-            if s in Character.name2ord:
-                return Character(Character.name2ord[s])
+            if s in Character.name_to_char:
+                return Character(Character.name_to_char[s])
             else:
                 exit('illegal character "#\%s' % s)
         c = s
     return Character(c)
+
+def read_string(f):
+    s = ''
+    while True:
+        c = getc_or_die(f)
+        if c == '"':
+            return s
+        elif c == '\\':
+            c = getc_or_die(f)
+            c = string_escape_to_char.get(c, c)
+        s += c
 
 def schread(f):
     sign = 1
@@ -77,7 +104,7 @@ def schread(f):
         if c == '-' or is_digit(c):
             if c == '-':
                 sign = -1
-                c = getc(f)
+                c = getc_or_die(f)
             n = 0
             while is_digit(c):
                 n = 10 * n + ord(c) - ord('0')
@@ -88,7 +115,7 @@ def schread(f):
                 return int(n)
             exit('number not followed by delimiter')
         elif c == '#':
-            c = getc(f)
+            c = getc_or_die(f)
             if c.lower() == 'f':
                 return False
             elif c.lower() == 't':
@@ -97,6 +124,8 @@ def schread(f):
                 return read_character(f)
             else:
                 exit('bad input.  Unexpected "#%s"' % c)
+        elif c == '"':
+            return read_string(f)
         else:
             exit('bad input.  Unexpected "%s"' % c)
     print >>sys.stderr, 'EOF'
@@ -115,8 +144,18 @@ def schwrite(x):
     elif isinstance(x, (int, long)):
         sys.stdout.write(str(x))
     elif isinstance(x, Character):
-        x = Character.ord2name.get(x, x)
+        x = Character.char_to_name.get(x, x)
         sys.stdout.write('#\\%s' % x)
+    elif isinstance(x, str):
+        print 'x=%r' % x
+        s = '"'
+        for c in x:
+            if c in string_char_to_escape:
+                s += '\\%s' % string_char_to_escape[c]
+            else:
+                s += c
+        s += '"'
+        sys.stdout.write(s)
     else:
         exit("can't write unknown type")
 
