@@ -11,6 +11,7 @@ import sys
 #   integer                       int, long
 #   character                     Character
 #   string                        str
+#   symbol			  Symbol
 #   empty list			  None
 #   pair			  Pair
 #   eof-object                    exit
@@ -37,6 +38,19 @@ string_escapes = 'abtnvfr"\\'
 string_escape_to_char = dict((e, eval('"\\%s"' % e)) for e in string_escapes)
 string_char_to_escape = dict((c, e)
                              for e, c in string_escape_to_char.iteritems())
+
+class Symbol(str):
+
+    all = {}
+
+    def __new__(cls, value):
+        try:
+            return cls.all[value]
+        except KeyError:
+            new_sym = super(Symbol, cls).__new__(cls, value)
+            cls.all[value] = new_sym
+            return new_sym
+
 
 class Pair(list):
     pass
@@ -95,6 +109,12 @@ def is_space(c):
 
 def is_delimiter(c):
     return not c or c in '()"' or is_space(c);
+
+def is_initial(c):
+    return c in string.ascii_letters or c in '!$%&*:<=>?^_~'
+
+def is_subsequent(c):
+    return is_initial(c) or is_digit(c) or c in '+=.@'
 
 def eat_whitespace(f):
     while True:
@@ -167,7 +187,7 @@ def read(f):
             break
         if is_space(c):
             continue
-        if c == '-' or is_digit(c):
+        if (c == '-' and is_digit(peekc(f))) or is_digit(c):
             if c == '-':
                 sign = -1
                 c = getc_or_die(f)
@@ -180,6 +200,12 @@ def read(f):
                 ungetc(c)
                 return int(n)
             exit('number not followed by delimiter')
+        elif is_initial(c) or (c in '+-' and
+                               (is_delimiter(peekc(f)) or peekc(f) == '>')):
+            sym = c
+            while is_subsequent(peekc(f)):
+                sym += getc(f)
+            return Symbol(sym)
         elif c == '#':
             c = getc_or_die(f)
             if c.lower() == 'f':
@@ -226,6 +252,8 @@ def write(x):
     elif isinstance(x, Character):
         x = Character.char_to_name.get(x, x)
         sys.stdout.write('#\\%s' % x)
+    elif isinstance(x, Symbol):
+        sys.stdout.write(x)
     elif isinstance(x, str):
         s = '"'
         for c in x:
