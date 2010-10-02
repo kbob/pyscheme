@@ -12,15 +12,15 @@ import sys
 # ------ ----                   ------ ----
 #   boolean                       bool
 #   integer                       int, long
-#   character                     class Character
-#   string                        class String
-#   symbol			  class Symbol
+#   character                     class Character(str)
+#   string                        class String(str)
+#   symbol			  class Symbol(str)
 #   empty list			  None
-#   pair			  class Pair
+#   pair			  class Pair(list)
 #   procedure                     <type 'function'>
-#   environment                   class Environment
-#   eof-object                    exit
-#                                 (a built-in function with a suggestive name)
+#   environment                   class Environment(dict)
+#   port                          file
+#   eof-object                    type(class EOF)
 
 class Character(str):
     name_to_char = {
@@ -98,8 +98,18 @@ def caddr(pair):
     assert isinstance(pair[1][1], Pair)
     return pair[1][1][0]
 
+def cdddr(pair):
+    assert isinstance(pair, Pair)
+    assert isinstance(pair[1], Pair)
+    assert isinstance(pair[1][1], Pair)
+    return pair[1][1][1]
 
-# could use: cdddr cadddr
+def cadddr(pair):
+    assert isinstance(pair, Pair)
+    assert isinstance(pair[1], Pair)
+    assert isinstance(pair[1][1], Pair)
+    assert isinstance(pair[1][1][1], Pair)
+    return pair[1][1][1][0]
 
 def setcar(pair, new_car):
     assert isinstance(pair, Pair)
@@ -120,6 +130,9 @@ def make_compound_proc(params, body, env):
 
 def is_primitive_proc(exp):
     return isinstance(exp, type(lambda: None)) and exp.func_name != '<lambda>'
+
+class EOF(object):
+    pass
 
 def is_null_proc(args):
     return car(args) is None
@@ -266,6 +279,77 @@ def environment_proc(args):
 def eval_proc(args):
     exit('eval can not be called')
 
+def load_proc(args):
+    fname = car(args)
+    assert isinstance(fname, String)
+    with open(fname) as f:
+        while True:
+            exp = read(f)
+            if exp is EOF:
+                break
+            result = scheval(exp, global_env)
+    return result
+
+def read_proc(args):
+    port = sys.stdin if args is None else car(args)
+    return read(port)
+
+def read_char_proc(args):
+    port = sys.stdin if args is None else car(args)
+    c = getc(port)
+    return c if c is EOF else Character(c)
+
+def peek_char_proc(args):
+    port = sys.stdin if args is None else car(args)
+    c = peekc(port)
+    return c if c is EOF else Character(c)
+
+def is_input_port_proc(args):
+    return isinstance(car(args), file)
+
+def open_input_file_proc(args):
+    return open(car(args))
+
+def close_input_port_proc(args):
+    car(args).close()
+    return Symbol('ok')
+
+def is_eof_object_proc(args):
+    return car(args) is EOF
+
+def open_output_file_proc(args):
+    return open(car(args), 'w')
+
+def close_output_port_proc(args):
+    car(args).close()
+    return Symbol('ok')
+
+def is_output_port_proc(args):
+    port = car(args)
+    return isinstance(port, file) and 'r' in port.mode
+
+def write_char_proc(args):
+    c = car(args)
+    assert isinstance(c, Character)
+    port = sys.stdout if cdr(args) is None else cadr(args)
+    port.write(c)
+    return Symbol('ok')
+
+def write_proc(args):
+    obj = car(args)
+    port = sys.stdout if cdr(args) is None else cadr(args)
+    write(port, exp)
+    port.flush()
+    return Symbol('ok')
+
+def error_proc(args):
+    sys.stdout.flush()
+    while args is not None:
+        write(sys.stderr, car(args))
+        sys.stderr.write('\n' if cdr(args) is None else ' ')
+        args = cdr(args)
+    exit('exiting')
+
 class Environment(dict):
     def __init__(self, parent):
         self.parent = parent
@@ -279,7 +363,8 @@ class Environment(dict):
     def __getitem__(self, var):
         if var in self:
             return self.get(var)
-        assert isinstance(self.parent, Environment)
+        if not isinstance(self.parent, Environment):
+            exit('variable "%s" not found' % var)
         return self.parent[var]
 
     def set_variable(self, var, value):
@@ -324,34 +409,45 @@ class Environment(dict):
         self['null-environment']        = null_environment_proc
         self['environment']             = environment_proc
         self['eval']                    = eval_proc
+        self['load']                    = load_proc
+        self['read']                    = read_proc
+        self['read-char']               = read_char_proc
+        self['peek-char']               = peek_char_proc
+        self['input-port?']             = is_input_port_proc
+        self['open-input-file']         = open_input_file_proc
+        self['close-input-port']        = close_input_port_proc
+        self['eof-object?']             = is_eof_object_proc
+        self['write']                   = write_proc
+        self['write-char']              = write_char_proc
+        self['output-port?']            = is_output_port_proc
+        self['open-output-file']        = open_output_file_proc
+        self['close-output-port']       = close_output_port_proc
+        self['error']                   = error_proc
 
 global_env = Environment(None)
 global_env.populate()
 
-ungot = None
+ungot = {}
 
 def getc(f):
-    global ungot
-    if ungot:
-        x, ungot = ungot, None
-        if x is 'EOF':
-            x = None
-        return x
-    return f.read(1)
+    if f in ungot:
+        c = ungot[f]
+        del ungot[f]
+        return c
+    else:
+        return f.read(1) or EOF
 
-def ungetc(c):
-    global ungot
-    assert ungot is None
-    ungot = c
+def ungetc(f, c):
+    assert f not in ungot
+    ungot[f] = c
     
 def peekc(f):
-    global ungot
-    ungot = getc(f)
-    return ungot
+    ungot[f] = c = getc(f)
+    return c
 
 def getc_or_die(f):
     c = getc(f)
-    if not c:
+    if c is EOF:
         exit('Unexpected EOF')
     return c
 
@@ -369,20 +465,20 @@ def is_initial(c):
     return c in string.ascii_letters or c in '!$%&*:<=>?^_~'
 
 def is_subsequent(c):
-    return is_initial(c) or is_digit(c) or c in '+-.@'
+    return (c is not EOF and (is_initial(c) or is_digit(c) or c in '+-.@'))
 
 def eat_whitespace(f):
     while True:
         c = getc(f)
-        if not c:
-            ungetc('EOF')
+        if c is EOF:
+            ungetc(f, c)
             break
         if c == ';':
             while c and c != '\n':
                 c = getc(f)
             continue
         if not is_space(c):
-            ungetc(c)
+            ungetc(f, c)
             break
 
 def read_character(f):
@@ -392,7 +488,7 @@ def read_character(f):
         while c in string.ascii_lowercase:
             s += c
             c = getc(f)
-        ungetc(c)
+        ungetc(f, c)
         if len(s) > 1:
             if s in Character.name_to_char:
                 return Character(Character.name_to_char[s])
@@ -417,7 +513,7 @@ def read_pair(f):
     c = getc_or_die(f)
     if c == ')':
         return None
-    ungetc(c)
+    ungetc(f, c)
     car_obj = read_or_die(f)
     eat_whitespace(f)
     c = getc_or_die(f)
@@ -432,13 +528,13 @@ def read_pair(f):
         if c != ')':
             exit('expected ")", got "%s"' % c)
     else:
-        ungetc(c)
+        ungetc(f, c)
         cdr_obj = read_pair(f)
     return cons(car_obj, cdr_obj)
 
 def read_or_die(f):
     exp = read(f)
-    if exp is exit:
+    if exp is EOF:
         exit('unexpected EOF')
     return exp
 
@@ -447,8 +543,8 @@ def read(f):
     while True:
         eat_whitespace(f)
         c = getc(f)
-        if not c:
-            break
+        if c is EOF:
+            return EOF
         if (c == '-' and is_digit(peekc(f))) or is_digit(c):
             if c == '-':
                 sign = -1
@@ -459,7 +555,7 @@ def read(f):
                 c = getc(f)
             n *= sign
             if is_delimiter(c):
-                ungetc(c)
+                ungetc(f, c)
                 return int(n)
             exit('number not followed by delimiter')
         elif is_initial(c) or (c in '+-' and
@@ -486,7 +582,6 @@ def read(f):
             return cons(Symbol('quote'), cons(read(f), None))
         else:
             exit('bad input.  Unexpected "%s"' % c)
-    return exit
         
 
 def is_self_evaluating(exp):
@@ -634,8 +729,8 @@ def scheval(exp, env):
             if is_true(scheval(cadr(exp), env)):
                 exp = caddr(exp)
                 continue
-            elif isinstance(cdr(cddr(exp)), Pair):
-                exp = cadr(cddr(exp))
+            elif isinstance(cdddr(exp), Pair):
+                exp = cadddr(exp)
                 continue
             return False
         elif is_lambda(exp):
@@ -693,27 +788,27 @@ def scheval(exp, env):
         else:
             exit('must be expression: "%s"' % exp)
 
-def write_pair(pair):
+def write_pair(f, pair):
     assert isinstance(pair, Pair)
-    write(car(pair))
+    write(f, car(pair))
     rest = cdr(pair)
     if isinstance(rest, Pair):
-        sys.stdout.write(' ')
-        write_pair(rest)
+        f.write(' ')
+        write_pair(f, rest)
     elif rest is not None:
-        sys.stdout.write(' . ')
-        write(rest)
+        f.write(' . ')
+        write(f, rest)
 
-def write(x):
+def write(f, x):
     if isinstance(x, bool):
-        sys.stdout.write(x and '#t' or '#f')
+        f.write(x and '#t' or '#f')
     elif isinstance(x, (int, long)):
-        sys.stdout.write(str(x))
+        f.write(str(x))
     elif isinstance(x, Character):
         x = Character.char_to_name.get(x, x)
-        sys.stdout.write('#\\%s' % x)
+        f.write('#\\%s' % x)
     elif isinstance(x, Symbol):
-        sys.stdout.write(x)
+        f.write(x)
     elif isinstance(x, String):
         s = '"'
         for c in x:
@@ -722,19 +817,23 @@ def write(x):
             else:
                 s += c
         s += '"'
-        sys.stdout.write(s)
+        f.write(s)
     elif isinstance(x, Environment):
         while x is not None:
-            sys.stdout.write(str(x))
+            f.write(str(x))
             x = x.parent
     elif isinstance(x, Pair):
-        sys.stdout.write('(')
-        write_pair(x)
-        sys.stdout.write(')')
+        f.write('(')
+        write_pair(f, x)
+        f.write(')')
     elif isinstance(x, type(lambda: None)):
-        sys.stdout.write('#<procedure>')
+        f.write('#<procedure>')
     elif x is None:
-        sys.stdout.write('()')
+        f.write('()')
+    elif isinstance(x, file):
+        f.write('#<port>')
+    elif x is EOF:
+        f.write('#<eof-object>')
     else:
         exit("can't write unknown type")
 
@@ -742,10 +841,10 @@ def main():
     while True:
         sys.stdout.write('> ')
         exp = read(sys.stdin)
-        if exp is exit:
+        if exp is EOF:
             print
             break
-        write(scheval(exp, global_env))
+        write(sys.stdout, scheval(exp, global_env))
         print
 
 if __name__ == '__main__':
