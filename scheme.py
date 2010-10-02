@@ -536,6 +536,39 @@ def cond_to_if(exp):
 
     return expand_clauses(cdr(exp))
 
+def let_to_application(exp):
+    make_application  = cons
+    let_bindings      = cadr
+    let_body          = cddr
+    binding_parameter = car
+    binding_argument  = cadr
+
+    def bindings_parameters(bindings):
+        if bindings is None:
+            return None
+        return cons(binding_parameter(car(bindings)),
+                    bindings_parameters(cdr(bindings)))
+
+    def bindings_arguments(bindings):
+        if bindings is None:
+            return None
+        return cons(binding_argument(car(bindings)),
+                    bindings_arguments(cdr(bindings)))
+
+    def let_parameters(exp):
+        return bindings_parameters(let_bindings(exp))
+
+    def let_arguments(exp):
+        return bindings_arguments(let_bindings(exp))
+
+    def make_lambda(params, body):
+        return cons(Symbol('lambda'), cons(params, body))
+
+
+    return make_application(make_lambda(let_parameters(exp),
+                                        let_body(exp)),
+                            let_arguments(exp))
+
 def list_of_values(exp, env):
     if exp is None:
         return None
@@ -572,6 +605,9 @@ def scheval(exp, env):
             continue
         elif is_cond(exp):
             exp = cond_to_if(exp)
+            continue
+        elif is_let(exp):
+            exp = let_to_application(exp)
             continue
         elif is_application(exp):
             proc = scheval(car(exp), env)
