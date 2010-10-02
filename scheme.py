@@ -242,6 +242,9 @@ def is_eq_proc(args):
             return False
     return True
 
+def apply_proc(args):
+    exit('apply can not be called')
+
 class Environment(dict):
     def __init__(self, parent):
         self.parent = parent
@@ -295,6 +298,7 @@ global_env['set-car!']       = set_car_proc
 global_env['set-cdr!']       = set_cdr_proc
 global_env['list']           = list_proc
 global_env['eq?']            = is_eq_proc
+global_env['apply']          = apply_proc
 
 ungot = None
 
@@ -574,6 +578,13 @@ def let_to_application(exp):
                                         let_body(exp)),
                             let_arguments(exp))
 
+def apply_operands(args):
+    def prepare_apply_operands(args):
+        if cdr(args) is None:
+            return car(args)
+        return cons(car(args), prepare_apply_operands(cdr(args)))
+    return prepare_apply_operands(cdr(args))
+
 def list_of_values(exp, env):
     if exp is None:
         return None
@@ -639,6 +650,9 @@ def scheval(exp, env):
         elif is_application(exp):
             proc = scheval(car(exp), env)
             args = list_of_values(cdr(exp), env)
+            if proc is apply_proc:
+                proc = car(args)
+                args = apply_operands(args)
             if is_primitive_proc(proc):
                 return proc(args)
             else:
