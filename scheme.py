@@ -3,6 +3,8 @@
 import string
 import sys
 
+# TODO: reimplement reader in PLY.
+
 # Data Type Map
 #
 # Scheme Type                   Python Type
@@ -76,6 +78,17 @@ def setcar(pair, new_car):
 def setcdr(pair, new_cdr):
     assert isinstance(pair, Pair)
     pair[1] = new_cdr
+
+def ziplists(*lists):
+    while all(lists):
+        yield [car(list) for list in lists]
+        lists = [cdr(list) for list in lists]
+
+def make_compound_proc(params, body, env):
+    return lambda args: (body, Environment.extend(params, args, env))
+
+def is_primitive_proc(exp):
+    return isinstance(exp, type(lambda: None)) and exp.func_name != '<lambda>'
 
 
 def is_null_proc(args):
@@ -211,9 +224,9 @@ class Environment(dict):
         self.parent = parent
 
     @classmethod
-    def extend(cls, vars, vals, parent):
+    def extend(cls, vars, values, parent):
         env = cls(parent)
-        env.update(zip(vars, values))
+        env.update(ziplists(vars, values))
         return env
 
     def __getitem__(self, var):
@@ -266,6 +279,8 @@ def getc(f):
     global ungot
     if ungot:
         x, ungot = ungot, None
+        if x is 'EOF':
+            x = None
         return x
     return f.read(1)
 
@@ -304,6 +319,13 @@ def is_subsequent(c):
 def eat_whitespace(f):
     while True:
         c = getc(f)
+        if not c:
+            ungetc('EOF')
+            break
+        if c == ';':
+            while c and c != '\n':
+                c = getc(f)
+            continue
         if not is_space(c):
             ungetc(c)
             break
@@ -368,11 +390,10 @@ def read_or_die(f):
 def read(f):
     sign = 1
     while True:
+        eat_whitespace(f)
         c = getc(f)
         if not c:
             break
-        if is_space(c):
-            continue
         if (c == '-' and is_digit(peekc(f))) or is_digit(c):
             if c == '-':
                 sign = -1
@@ -434,6 +455,9 @@ def is_true(exp):
 def is_if(exp):
     return isinstance(exp, Pair) and car(exp) is Symbol('if')
 
+def is_lambda(exp):
+    return isinstance(exp, Pair) and car(exp) is Symbol('lambda')
+
 def is_application(exp):
     return isinstance(exp, Pair)
 
@@ -444,12 +468,21 @@ def eval_quotation(exp, env):
     return car(cdr(exp))
 
 def eval_definition(exp, env):
-    env[car(cdr(exp))] = scheval(car(cdr(cdr(exp))), env)
+    var = car(cdr(exp))
+    if isinstance(var, Pair):
+        var, params = car(var), cdr(var)
+        value = make_compound_proc(params, cdr(cdr(exp)), env)
+    else:
+        value = scheval(car(cdr(cdr(exp))), env)
+    env[var] = value
     return Symbol('ok')
 
 def eval_assignment(exp, env):
     env.set_variable(car(cdr(exp)), scheval(car(cdr(cdr(exp))), env))
     return Symbol('ok')
+
+def eval_lambda(exp, env):
+    return make_compound_proc(car(cdr(exp)), cdr(cdr(exp)), env)
 
 def list_of_values(exp, env):
     if exp is None:
@@ -476,10 +509,20 @@ def scheval(exp, env):
                 exp = car(cdr(cdr(cdr(exp))))
                 continue
             return False
+        elif is_lambda(exp):
+            return eval_lambda(exp, env)
         elif is_application(exp):
             proc = scheval(car(exp), env)
             args = list_of_values(cdr(exp), env)
-            return proc(args)
+            if is_primitive_proc(proc):
+                return proc(args)
+            else:
+                exp, env = proc(args)
+                while cdr(exp) is not None:
+                    scheval(car(exp), env)
+                    exp = cdr(exp)
+                exp = car(exp)
+                continue
         else:
             exit('must be expression: "%s"' % exp)
 
