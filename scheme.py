@@ -220,6 +220,8 @@ def read(f):
             return read_string(f)
         elif c == '(':
             return read_pair(f)
+        elif c == "'":
+            return cons(Symbol('quote'), cons(read(f), None))
         else:
             exit('bad input.  Unexpected "%s"' % c)
     return exit
@@ -228,10 +230,15 @@ def read(f):
 def is_self_evaluating(exp):
     return isinstance(exp, (int, long, bool, Character, str))
 
+def is_quotation(exp):
+    return isinstance(exp, Pair) and car(exp) is Symbol('quote')
+
 def scheval(exp):
-#    if is_self_evaluating(exp):
+    if is_self_evaluating(exp):
         return exp
-#    exit('must be expression: "%s"' % exp)
+    elif is_quotation(exp):
+        return car(cdr(exp))
+    exit('must be expression: "%s"' % exp)
 
 def write_pair(pair):
     assert isinstance(pair, Pair)
