@@ -270,6 +270,12 @@ def is_definition(exp):
 def is_assignment(exp):
     return isinstance(exp, Pair) and car(exp) is Symbol('set!')
 
+def is_true(exp):
+    return exp is not False
+
+def is_if(exp):
+    return isinstance(exp, Pair) and car(exp) is Symbol('if')
+
 def eval_variable(exp, env):
     return env[exp]
 
@@ -285,17 +291,27 @@ def eval_assignment(exp, env):
     return Symbol('ok')
 
 def scheval(exp, env):
-    if is_self_evaluating(exp):
-        return exp
-    elif is_variable(exp):
-        return eval_variable(exp, env)
-    elif is_quotation(exp):
-        return eval_quotation(exp, env)
-    elif is_definition(exp):
-        return eval_definition(exp, env)
-    elif is_assignment(exp):
-        return eval_assignment(exp, env)
-    exit('must be expression: "%s"' % exp)
+    while True:
+        if is_self_evaluating(exp):
+            return exp
+        elif is_variable(exp):
+            return eval_variable(exp, env)
+        elif is_quotation(exp):
+            return eval_quotation(exp, env)
+        elif is_definition(exp):
+            return eval_definition(exp, env)
+        elif is_assignment(exp):
+            return eval_assignment(exp, env)
+        elif is_if(exp):
+            if is_true(scheval(car(cdr(exp)), env)):
+                exp = car(cdr(cdr(exp)))
+                continue
+            elif isinstance(cdr(cdr(cdr(exp))), Pair):
+                exp = car(cdr(cdr(cdr(exp))))
+                continue
+            return False
+        else:
+            exit('must be expression: "%s"' % exp)
 
 def write_pair(pair):
     assert isinstance(pair, Pair)
