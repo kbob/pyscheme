@@ -78,6 +78,48 @@ def setcdr(pair, new_cdr):
     pair[1] = new_cdr
 
 
+def is_null_proc(args):
+    return car(args) is None
+
+def is_boolean_proc(args):
+    return isinstance(car(args), bool)
+
+def is_symbol_proc(args):
+    return isinstance(car(args), Symbol)
+
+def is_integer_proc(args):
+    return isinstance(car(args), (int, long))
+
+def is_char_proc(args):
+    return isinstance(car(args), Character)
+
+def is_string_proc(args):
+    return isinstance(car(args), String)
+
+def is_pair_proc(args):
+    return isinstance(car(args), Pair)
+
+def is_procedure_proc(args):
+    return isinstance(car(args), type(lambda: None))
+
+def char_to_integer_proc(args):
+    return ord(car(args))
+
+def integer_to_char_proc(args):
+    return Character(chr(car(args)))
+
+def number_to_string_proc(args):
+    return String(car(args))
+
+def string_to_number_proc(args):
+    return int(car(args))
+
+def symbol_to_string_proc(args):
+    return String(car(args))
+
+def string_to_symbol_proc(args):
+    return Symbol(car(args))
+
 def add_proc(args):
     result = 0
     while args:
@@ -85,6 +127,84 @@ def add_proc(args):
         args = cdr(args)
     return result
 
+def sub_proc(args):
+    if cdr(args) is None:
+        return -car(args)
+    result = car(args)
+    args = cdr(args)
+    while args:
+        result -= car(args)
+        args = cdr(args)
+    return result
+
+def mul_proc(args):
+    result = 1
+    while args:
+        result *= car(args)
+        args = cdr(args)
+    return result
+    
+def quotient_proc(args):
+    return car(args) / car(cdr(args))
+
+def remainder_proc(args):
+    return car(args) % car(cdr(args))
+
+def is_equal_proc(args):
+    z1 = car(args)
+    args = cdr(args)
+    while args:
+        z0, z1, args = z1, car(args), cdr(args)
+        if z0 != z1:
+            return False
+    return True
+
+def is_less_than_proc(args):
+    z1 = car(args)
+    args = cdr(args)
+    while args:
+        z0, z1, args = z1, car(args), cdr(args)
+        if z0 >= z1:
+            return False
+    return True
+
+def is_greater_then_proc(args):
+    z1 = car(args)
+    args = cdr(args)
+    while args:
+        z0, z1, args = z1, car(args), cdr(args)
+        if z0 <= z1:
+            return False
+    return True
+
+def cons_proc(args):
+    return cons(car(args), car(cdr(args)))
+
+def car_proc(args):
+    return car(car(args))
+
+def cdr_proc(args):
+    return cdr(car(args))
+
+def set_car_proc(args):
+    setcar(car(args), car(cdr(args)))
+    return Symbol('ok')
+
+def set_cdr_proc(args):
+    setcdr(car(args), car(cdr(args)))
+    return Symbol('ok')
+
+def list_proc(args):
+    return args
+
+def is_eq_proc(args):
+    z1 = car(args)
+    args = cdr(args)
+    while args:
+        z0, z1, args = z1, car(args), cdr(args)
+        if z0 is not z1:
+            return False
+    return True
 
 class Environment(dict):
     def __init__(self, parent):
@@ -110,8 +230,35 @@ class Environment(dict):
             self.parent.set_variable(var, value)
 
 global_env = Environment(None)
-global_env['+'] = add_proc
-
+global_env['null?']          = is_null_proc
+global_env['boolean?']       = is_boolean_proc
+global_env['symbol?']        = is_symbol_proc
+global_env['integer?']       = is_integer_proc
+global_env['char?']          = is_char_proc
+global_env['string?']        = is_string_proc
+global_env['pair?']          = is_pair_proc
+global_env['procedure?']     = is_procedure_proc
+global_env['char->integer']  = char_to_integer_proc
+global_env['integer->char']  = integer_to_char_proc
+global_env['number->string'] = number_to_string_proc
+global_env['string->number'] = string_to_number_proc
+global_env['symbol->string'] = symbol_to_string_proc
+global_env['string->symbol'] = string_to_symbol_proc
+global_env['+']              = add_proc
+global_env['-']              = sub_proc
+global_env['*']              = mul_proc
+global_env['quotient']       = quotient_proc
+global_env['remainder']      = remainder_proc
+global_env['=']              = is_equal_proc
+global_env['<']              = is_less_than_proc
+global_env['>']              = is_greater_then_proc
+global_env['cons']           = cons_proc
+global_env['car']            = car_proc
+global_env['cdr']            = cdr_proc
+global_env['set-car!']       = set_car_proc
+global_env['set-cdr!']       = set_cdr_proc
+global_env['list']           = list_proc
+global_env['eq?']            = is_eq_proc
 
 ungot = None
 
@@ -152,7 +299,7 @@ def is_initial(c):
     return c in string.ascii_letters or c in '!$%&*:<=>?^_~'
 
 def is_subsequent(c):
-    return is_initial(c) or is_digit(c) or c in '+=.@'
+    return is_initial(c) or is_digit(c) or c in '+-.@'
 
 def eat_whitespace(f):
     while True:
@@ -167,7 +314,8 @@ def read_character(f):
         s = ''
         while c in string.ascii_lowercase:
             s += c
-            c = getc_or_die(f)
+            c = getc(f)
+        ungetc(c)
         if len(s) > 1:
             if s in Character.name_to_char:
                 return Character(Character.name_to_char[s])
