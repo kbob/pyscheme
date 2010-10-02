@@ -72,6 +72,28 @@ def cdr(pair):
     assert isinstance(pair, Pair)
     return pair[1]
 
+def caar(pair):
+    assert isinstance(pair, Pair)
+    assert isinstance(pair[0], Pair)
+    return pair[0][0]
+    
+def cadr(pair):
+    assert isinstance(pair, Pair)
+    assert isinstance(pair[1], Pair)
+    return pair[1][0]
+    
+def cdar(pair):
+    assert isinstance(pair, Pair)
+    assert isinstance(pair[0], Pair)
+    return pair[0][1]
+    
+def cddr(pair):
+    assert isinstance(pair, Pair)
+    assert isinstance(pair[1], Pair)
+    return pair[1][1]
+    
+# could use: caddr cdddr cadddr
+
 def setcar(pair, new_car):
     assert isinstance(pair, Pair)
     pair[0] = new_car
@@ -159,10 +181,10 @@ def mul_proc(args):
     return result
     
 def quotient_proc(args):
-    return car(args) / car(cdr(args))
+    return car(args) / cadr(args)
 
 def remainder_proc(args):
-    return car(args) % car(cdr(args))
+    return car(args) % cadr(args)
 
 def is_equal_proc(args):
     z1 = car(args)
@@ -192,20 +214,20 @@ def is_greater_then_proc(args):
     return True
 
 def cons_proc(args):
-    return cons(car(args), car(cdr(args)))
+    return cons(car(args), cadr(args))
 
 def car_proc(args):
-    return car(car(args))
+    return caar(args)
 
 def cdr_proc(args):
-    return cdr(car(args))
+    return cdar(args)
 
 def set_car_proc(args):
-    setcar(car(args), car(cdr(args)))
+    setcar(car(args), cadr(args))
     return Symbol('ok')
 
 def set_cdr_proc(args):
-    setcdr(car(args), car(cdr(args)))
+    setcdr(car(args), cadr(args))
     return Symbol('ok')
 
 def list_proc(args):
@@ -452,6 +474,7 @@ is_if         = tagged_list_predicate('if')
 is_lambda     = tagged_list_predicate('lambda')
 is_begin      = tagged_list_predicate('begin')
 is_cond       = tagged_list_predicate('cond')
+is_let        = tagged_list_predicate('let')
 
 def is_true(exp):
     return exp is not False
@@ -463,24 +486,24 @@ def eval_variable(exp, env):
     return env[exp]
 
 def eval_quotation(exp, env):
-    return car(cdr(exp))
+    return cadr(exp)
 
 def eval_definition(exp, env):
-    var = car(cdr(exp))
+    var = cadr(exp)
     if isinstance(var, Pair):
         var, params = car(var), cdr(var)
-        value = make_compound_proc(params, cdr(cdr(exp)), env)
+        value = make_compound_proc(params, cddr(exp), env)
     else:
-        value = scheval(car(cdr(cdr(exp))), env)
+        value = scheval(car(cddr(exp)), env)
     env[var] = value
     return Symbol('ok')
 
 def eval_assignment(exp, env):
-    env.set_variable(car(cdr(exp)), scheval(car(cdr(cdr(exp))), env))
+    env.set_variable(cadr(exp), scheval(car(cddr(exp)), env))
     return Symbol('ok')
 
 def eval_lambda(exp, env):
-    return make_compound_proc(car(cdr(exp)), cdr(cdr(exp)), env)
+    return make_compound_proc(cadr(exp), cddr(exp), env)
 
 def cond_to_if(exp):
 
@@ -531,11 +554,11 @@ def scheval(exp, env):
         elif is_assignment(exp):
             return eval_assignment(exp, env)
         elif is_if(exp):
-            if is_true(scheval(car(cdr(exp)), env)):
-                exp = car(cdr(cdr(exp)))
+            if is_true(scheval(cadr(exp), env)):
+                exp = car(cddr(exp))
                 continue
-            elif isinstance(cdr(cdr(cdr(exp))), Pair):
-                exp = car(cdr(cdr(cdr(exp))))
+            elif isinstance(cdr(cddr(exp)), Pair):
+                exp = cadr(cddr(exp))
                 continue
             return False
         elif is_lambda(exp):
