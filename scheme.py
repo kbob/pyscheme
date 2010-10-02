@@ -4,6 +4,7 @@ import string
 import sys
 
 # TODO: reimplement reader in PLY.
+# TODO: reimplement writer as methods.
 
 # Data Type Map
 #
@@ -450,6 +451,7 @@ is_assignment = tagged_list_predicate('set!')
 is_if         = tagged_list_predicate('if')
 is_lambda     = tagged_list_predicate('lambda')
 is_begin      = tagged_list_predicate('begin')
+is_cond       = tagged_list_predicate('cond')
 
 def is_true(exp):
     return exp is not False
@@ -479,6 +481,37 @@ def eval_assignment(exp, env):
 
 def eval_lambda(exp, env):
     return make_compound_proc(car(cdr(exp)), cdr(cdr(exp)), env)
+
+def cond_to_if(exp):
+
+    def make_if(predicate, consequent, alternative):
+        return cons(Symbol('if'),
+                    cons(predicate,
+                         cons(consequent,
+                              cons(alternative, None))))
+
+    is_cond_else_clause = tagged_list_predicate('else')
+
+    def sequence_to_exp(seq):
+        if seq is None:
+            return None
+        if cdr(seq) is None:
+            return car(seq)
+        return make_begin(seq)
+
+    def expand_clauses(clauses):
+        if clauses is None:
+            return False
+        clause = car(clauses)
+        if is_cond_else_clause(clause):
+            if cdr(clauses) is not None:
+                exit("else clause isn't last in cond")
+            return sequence_to_exp(cdr(clause))
+        return make_if(car(clause),
+                       sequence_to_exp(cdr(clause)),
+                       expand_clauses(cdr(clauses)))
+
+    return expand_clauses(cdr(exp))
 
 def list_of_values(exp, env):
     if exp is None:
@@ -513,6 +546,9 @@ def scheval(exp, env):
                 scheval(car(exp), env)
                 exp = cdr(exp)
             exp = car(exp)
+            continue
+        elif is_cond(exp):
+            exp = cond_to_if(exp)
             continue
         elif is_application(exp):
             proc = scheval(car(exp), env)
