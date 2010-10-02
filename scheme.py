@@ -92,7 +92,14 @@ def cddr(pair):
     assert isinstance(pair[1], Pair)
     return pair[1][1]
     
-# could use: caddr cdddr cadddr
+def caddr(pair):
+    assert isinstance(pair, Pair)
+    assert isinstance(pair[1], Pair)
+    assert isinstance(pair[1][1], Pair)
+    return pair[1][1][0]
+
+
+# could use: cdddr cadddr
 
 def setcar(pair, new_car):
     assert isinstance(pair, Pair)
@@ -245,6 +252,20 @@ def is_eq_proc(args):
 def apply_proc(args):
     exit('apply can not be called')
 
+def interaction_environment_proc(args):
+    return global_env
+
+def null_environment_proc(args):
+    return Environment(None)
+
+def environment_proc(args):
+    env = Environment(None)
+    env.populate()
+    return env
+
+def eval_proc(args):
+    exit('eval can not be called')
+
 class Environment(dict):
     def __init__(self, parent):
         self.parent = parent
@@ -268,37 +289,44 @@ class Environment(dict):
             assert isinstance(self.parent, Environment)
             self.parent.set_variable(var, value)
 
+    def populate(self):
+        self['null?']                   = is_null_proc
+        self['boolean?']                = is_boolean_proc
+        self['symbol?']                 = is_symbol_proc
+        self['integer?']                = is_integer_proc
+        self['char?']                   = is_char_proc
+        self['string?']                 = is_string_proc
+        self['pair?']                   = is_pair_proc
+        self['procedure?']              = is_procedure_proc
+        self['char->integer']           = char_to_integer_proc
+        self['integer->char']           = integer_to_char_proc
+        self['number->string']          = number_to_string_proc
+        self['string->number']          = string_to_number_proc
+        self['symbol->string']          = symbol_to_string_proc
+        self['string->symbol']          = string_to_symbol_proc
+        self['+']                       = add_proc
+        self['-']                       = sub_proc
+        self['*']                       = mul_proc
+        self['quotient']                = quotient_proc
+        self['remainder']               = remainder_proc
+        self['=']                       = is_equal_proc
+        self['<']                       = is_less_than_proc
+        self['>']                       = is_greater_then_proc
+        self['cons']                    = cons_proc
+        self['car']                     = car_proc
+        self['cdr']                     = cdr_proc
+        self['set-car!']                = set_car_proc
+        self['set-cdr!']                = set_cdr_proc
+        self['list']                    = list_proc
+        self['eq?']                     = is_eq_proc
+        self['apply']                   = apply_proc
+        self['interaction-environment'] = interaction_environment_proc
+        self['null-environment']        = null_environment_proc
+        self['environment']             = environment_proc
+        self['eval']                    = eval_proc
+
 global_env = Environment(None)
-global_env['null?']          = is_null_proc
-global_env['boolean?']       = is_boolean_proc
-global_env['symbol?']        = is_symbol_proc
-global_env['integer?']       = is_integer_proc
-global_env['char?']          = is_char_proc
-global_env['string?']        = is_string_proc
-global_env['pair?']          = is_pair_proc
-global_env['procedure?']     = is_procedure_proc
-global_env['char->integer']  = char_to_integer_proc
-global_env['integer->char']  = integer_to_char_proc
-global_env['number->string'] = number_to_string_proc
-global_env['string->number'] = string_to_number_proc
-global_env['symbol->string'] = symbol_to_string_proc
-global_env['string->symbol'] = string_to_symbol_proc
-global_env['+']              = add_proc
-global_env['-']              = sub_proc
-global_env['*']              = mul_proc
-global_env['quotient']       = quotient_proc
-global_env['remainder']      = remainder_proc
-global_env['=']              = is_equal_proc
-global_env['<']              = is_less_than_proc
-global_env['>']              = is_greater_then_proc
-global_env['cons']           = cons_proc
-global_env['car']            = car_proc
-global_env['cdr']            = cdr_proc
-global_env['set-car!']       = set_car_proc
-global_env['set-cdr!']       = set_cdr_proc
-global_env['list']           = list_proc
-global_env['eq?']            = is_eq_proc
-global_env['apply']          = apply_proc
+global_env.populate()
 
 ungot = None
 
@@ -503,12 +531,12 @@ def eval_definition(exp, env):
         var, params = car(var), cdr(var)
         value = make_compound_proc(params, cddr(exp), env)
     else:
-        value = scheval(car(cddr(exp)), env)
+        value = scheval(caddr(exp), env)
     env[var] = value
     return Symbol('ok')
 
 def eval_assignment(exp, env):
-    env.set_variable(cadr(exp), scheval(car(cddr(exp)), env))
+    env.set_variable(cadr(exp), scheval(caddr(exp), env))
     return Symbol('ok')
 
 def eval_lambda(exp, env):
@@ -604,7 +632,7 @@ def scheval(exp, env):
             return eval_assignment(exp, env)
         elif is_if(exp):
             if is_true(scheval(cadr(exp), env)):
-                exp = car(cddr(exp))
+                exp = caddr(exp)
                 continue
             elif isinstance(cdr(cddr(exp)), Pair):
                 exp = cadr(cddr(exp))
@@ -650,6 +678,10 @@ def scheval(exp, env):
         elif is_application(exp):
             proc = scheval(car(exp), env)
             args = list_of_values(cdr(exp), env)
+            if proc is eval_proc:
+                exp = car(args)
+                env = cadr(args)
+                continue
             if proc is apply_proc:
                 proc = car(args)
                 args = apply_operands(args)
@@ -691,8 +723,11 @@ def write(x):
                 s += c
         s += '"'
         sys.stdout.write(s)
+    elif isinstance(x, Environment):
+        while x is not None:
+            sys.stdout.write(str(x))
+            x = x.parent
     elif isinstance(x, Pair):
-        
         sys.stdout.write('(')
         write_pair(x)
         sys.stdout.write(')')
