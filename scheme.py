@@ -85,11 +85,11 @@ def ziplists(*lists):
         lists = [cdr(list) for list in lists]
 
 def make_compound_proc(params, body, env):
+    body = cons(Symbol('begin'), body)
     return lambda args: (body, Environment.extend(params, args, env))
 
 def is_primitive_proc(exp):
     return isinstance(exp, type(lambda: None)) and exp.func_name != '<lambda>'
-
 
 def is_null_proc(args):
     return car(args) is None
@@ -440,23 +440,19 @@ def is_self_evaluating(exp):
 def is_variable(exp):
     return isinstance(exp, Symbol)
 
-def is_quotation(exp):
-    return isinstance(exp, Pair) and car(exp) is Symbol('quote')
+def tagged_list_predicate(sym):
+    sym = Symbol(sym)    
+    return lambda exp: isinstance(exp, Pair) and car(exp) is sym
 
-def is_definition(exp):
-    return isinstance(exp, Pair) and car(exp) is Symbol('define')
-
-def is_assignment(exp):
-    return isinstance(exp, Pair) and car(exp) is Symbol('set!')
+is_quotation  = tagged_list_predicate('quote')
+is_definition = tagged_list_predicate('define')
+is_assignment = tagged_list_predicate('set!')
+is_if         = tagged_list_predicate('if')
+is_lambda     = tagged_list_predicate('lambda')
+is_begin      = tagged_list_predicate('begin')
 
 def is_true(exp):
     return exp is not False
-
-def is_if(exp):
-    return isinstance(exp, Pair) and car(exp) is Symbol('if')
-
-def is_lambda(exp):
-    return isinstance(exp, Pair) and car(exp) is Symbol('lambda')
 
 def is_application(exp):
     return isinstance(exp, Pair)
@@ -511,6 +507,13 @@ def scheval(exp, env):
             return False
         elif is_lambda(exp):
             return eval_lambda(exp, env)
+        elif is_begin(exp):
+            exp = cdr(exp)
+            while cdr(exp) is not None:
+                scheval(car(exp), env)
+                exp = cdr(exp)
+            exp = car(exp)
+            continue
         elif is_application(exp):
             proc = scheval(car(exp), env)
             args = list_of_values(cdr(exp), env)
@@ -518,10 +521,6 @@ def scheval(exp, env):
                 return proc(args)
             else:
                 exp, env = proc(args)
-                while cdr(exp) is not None:
-                    scheval(car(exp), env)
-                    exp = cdr(exp)
-                exp = car(exp)
                 continue
         else:
             exit('must be expression: "%s"' % exp)
