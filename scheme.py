@@ -475,9 +475,14 @@ is_lambda     = tagged_list_predicate('lambda')
 is_begin      = tagged_list_predicate('begin')
 is_cond       = tagged_list_predicate('cond')
 is_let        = tagged_list_predicate('let')
+is_and        = tagged_list_predicate('and')
+is_or         = tagged_list_predicate('or')
 
 def is_true(exp):
     return exp is not False
+
+def is_false(exp):
+    return exp is False
 
 def is_application(exp):
     return isinstance(exp, Pair)
@@ -608,6 +613,28 @@ def scheval(exp, env):
             continue
         elif is_let(exp):
             exp = let_to_application(exp)
+            continue
+        elif is_and(exp):
+            exp = cdr(exp)
+            if exp is None:
+                return True
+            while cdr(exp) is not None:
+                result = scheval(car(exp), env)
+                if is_false(result):
+                    return result
+                exp = cdr(exp)
+            exp = car(exp)
+            continue
+        elif is_or(exp):
+            exp = cdr(exp)
+            if exp is None:
+                return False
+            while cdr(exp) is not None:
+                result = scheval(car(exp), env)
+                if is_true(result):
+                    return result
+                exp = cdr(exp)
+            exp = car(exp)
             continue
         elif is_application(exp):
             proc = scheval(car(exp), env)
