@@ -9,11 +9,12 @@ import sys
 # ------ ----                   ------ ----
 #   boolean                       bool
 #   integer                       int, long
-#   character                     Character
-#   string                        str
-#   symbol			  Symbol
+#   character                     class Character
+#   string                        class String
+#   symbol			  class Symbol
 #   empty list			  None
-#   pair			  Pair
+#   pair			  class Pair
+#   environment                   class Environment
 #   eof-object                    exit
 #                                 (a built-in function with a suggestive name)
 
@@ -34,10 +35,11 @@ class Character(str):
     char_to_name = dict((c, n) for n, c in name_to_char.iteritems())
     name_to_char['linefeed'] = '\n'  # synonym for #\newline
 
-string_escapes = 'abtnvfr"\\'
-string_escape_to_char = dict((e, eval('"\\%s"' % e)) for e in string_escapes)
-string_char_to_escape = dict((c, e)
-                             for e, c in string_escape_to_char.iteritems())
+class String(str):
+    escapes = 'abtnvfr"\\'
+    escape_to_char = dict((e, eval('"\\%s"' % e)) for e in escapes)
+    char_to_escape = dict((c, e) for e, c in escape_to_char.iteritems())
+
 
 class Symbol(str):
 
@@ -73,6 +75,32 @@ def setcar(pair, new_car):
 def setcdr(pair, new_cdr):
     assert isinstance(pair, Pair)
     pair[1] = new_cdr
+
+
+class Environment(dict):
+    def __init__(self, parent):
+        self.parent = parent
+
+    @classmethod
+    def extend(cls, vars, vals, parent):
+        env = cls(parent)
+        env.update(zip(vars, values))
+        return env
+
+    def __getitem__(self, var):
+        if var in self:
+            return self.get(var)
+        assert isinstance(self.parent, Environment)
+        return self.parent[var]
+
+    def set_variable(self, var, value):
+        if var in self:
+            self[var] = value
+        else:
+            assert isinstance(self.parent, Environment)
+            self.parent.set_variable(var, value)
+
+global_env = Environment(None)
 
 
 ungot = None
@@ -143,10 +171,10 @@ def read_string(f):
     while True:
         c = getc_or_die(f)
         if c == '"':
-            return s
+            return String(s)
         elif c == '\\':
             c = getc_or_die(f)
-            c = string_escape_to_char.get(c, c)
+            c = String.escape_to_char.get(c, c)
         s += c
 
 def read_pair(f):
@@ -228,16 +256,45 @@ def read(f):
         
 
 def is_self_evaluating(exp):
-    return isinstance(exp, (int, long, bool, Character, str))
+    return isinstance(exp, (int, long, bool, Character, String))
+
+def is_variable(exp):
+    return isinstance(exp, Symbol)
 
 def is_quotation(exp):
     return isinstance(exp, Pair) and car(exp) is Symbol('quote')
 
-def scheval(exp):
+def is_definition(exp):
+    return isinstance(exp, Pair) and car(exp) is Symbol('define')
+
+def is_assignment(exp):
+    return isinstance(exp, Pair) and car(exp) is Symbol('set!')
+
+def eval_variable(exp, env):
+    return env[exp]
+
+def eval_quotation(exp, env):
+    return car(cdr(exp))
+
+def eval_definition(exp, env):
+    env[car(cdr(exp))] = scheval(car(cdr(cdr(exp))), env)
+    return Symbol('ok')
+
+def eval_assignment(exp, env):
+    env.set_variable(car(cdr(exp)), scheval(car(cdr(cdr(exp))), env))
+    return Symbol('ok')
+
+def scheval(exp, env):
     if is_self_evaluating(exp):
         return exp
+    elif is_variable(exp):
+        return eval_variable(exp, env)
     elif is_quotation(exp):
-        return car(cdr(exp))
+        return eval_quotation(exp, env)
+    elif is_definition(exp):
+        return eval_definition(exp, env)
+    elif is_assignment(exp):
+        return eval_assignment(exp, env)
     exit('must be expression: "%s"' % exp)
 
 def write_pair(pair):
@@ -261,11 +318,11 @@ def write(x):
         sys.stdout.write('#\\%s' % x)
     elif isinstance(x, Symbol):
         sys.stdout.write(x)
-    elif isinstance(x, str):
+    elif isinstance(x, String):
         s = '"'
         for c in x:
-            if c in string_char_to_escape:
-                s += '\\%s' % string_char_to_escape[c]
+            if c in String.char_to_escape:
+                s += '\\%s' % String.char_to_escape[c]
             else:
                 s += c
         s += '"'
@@ -287,7 +344,7 @@ def main():
         if exp is exit:
             print
             break
-        write(scheval(exp))
+        write(scheval(exp, global_env))
         print
 
 if __name__ == '__main__':
