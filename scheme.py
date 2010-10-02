@@ -14,6 +14,7 @@ import sys
 #   symbol			  class Symbol
 #   empty list			  None
 #   pair			  class Pair
+#   procedure                     <type 'function'>
 #   environment                   class Environment
 #   eof-object                    exit
 #                                 (a built-in function with a suggestive name)
@@ -77,6 +78,14 @@ def setcdr(pair, new_cdr):
     pair[1] = new_cdr
 
 
+def add_proc(args):
+    result = 0
+    while args:
+        result += car(args)
+        args = cdr(args)
+    return result
+
+
 class Environment(dict):
     def __init__(self, parent):
         self.parent = parent
@@ -101,6 +110,7 @@ class Environment(dict):
             self.parent.set_variable(var, value)
 
 global_env = Environment(None)
+global_env['+'] = add_proc
 
 
 ungot = None
@@ -276,6 +286,9 @@ def is_true(exp):
 def is_if(exp):
     return isinstance(exp, Pair) and car(exp) is Symbol('if')
 
+def is_application(exp):
+    return isinstance(exp, Pair)
+
 def eval_variable(exp, env):
     return env[exp]
 
@@ -289,6 +302,11 @@ def eval_definition(exp, env):
 def eval_assignment(exp, env):
     env.set_variable(car(cdr(exp)), scheval(car(cdr(cdr(exp))), env))
     return Symbol('ok')
+
+def list_of_values(exp, env):
+    if exp is None:
+        return None
+    return cons(scheval(car(exp), env), list_of_values(cdr(exp), env))
 
 def scheval(exp, env):
     while True:
@@ -310,6 +328,10 @@ def scheval(exp, env):
                 exp = car(cdr(cdr(cdr(exp))))
                 continue
             return False
+        elif is_application(exp):
+            proc = scheval(car(exp), env)
+            args = list_of_values(cdr(exp), env)
+            return proc(args)
         else:
             exit('must be expression: "%s"' % exp)
 
@@ -348,6 +370,8 @@ def write(x):
         sys.stdout.write('(')
         write_pair(x)
         sys.stdout.write(')')
+    elif isinstance(x, type(lambda: None)):
+        sys.stdout.write('#<procedure>')
     elif x is None:
         sys.stdout.write('()')
     else:
